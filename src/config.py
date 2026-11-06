@@ -23,6 +23,8 @@ RUTA_PREDICCIONES: Path = DATA_DIR / "predicciones.csv"
 RUTA_AUDITORIA: Path = DATA_DIR / "auditoria.csv"
 RUTA_BANDEJA: Path = DATA_DIR / "bandeja_simulada.jsonl"       # mensajes que NUNCA se envían
 RUTA_MODELO: Path = DATA_DIR / "modelo.pkl"
+RUTA_METRICAS: Path = DATA_DIR / "metricas.json"
+RUTA_AUDITORIA_JSON: Path = DATA_DIR / "auditoria.json"
 
 # --- Umbrales de riesgo (en %). Cambiarlos requiere autorización del equipo. ---
 UMBRAL_MEDIO: int = 40   # >= 40 y <= 70 -> medio: invitación automática a bandeja simulada
@@ -30,14 +32,33 @@ UMBRAL_ALTO: int = 70    # > 70 -> alto: un tutor revisa y decide
 
 # --- Variables -------------------------------------------------------------
 # Únicas entradas permitidas al modelo: conducta académica.
-FEATURES_MODELO: tuple[str, ...] = (
+# Versión base ("antes"): calculada sobre la asistencia registrada tal cual.
+FEATURES_BASE: tuple[str, ...] = (
     "asistencia_promedio",
     "asistencia_tendencia",
+    "semanas_bajo_75",
     "nota_promedio",
-    "nota_tendencia",
-    "evaluaciones_rojas",
-    "semanas_sin_asistir",
+    "notas_rojas",
+    "cambio_parciales",
 )
+# Versión robusta ("después", mitigación de sesgo): la asistencia se suaviza con
+# mediana móvil de 3 semanas antes de calcular nivel, tendencia y semanas bajo 75%.
+FEATURES_ROBUSTAS: tuple[str, ...] = (
+    "asistencia_mediana",
+    "asistencia_tendencia_robusta",
+    "semanas_bajo_75_robusta",
+    "nota_promedio",
+    "notas_rojas",
+    "cambio_parciales",
+)
+FEATURES_MODELO: tuple[str, ...] = FEATURES_ROBUSTAS   # las que usa el modelo en producción
+UMBRAL_SEMANA_BAJA: float = 75.0
+# Bandera informativa (NO entra al modelo): >= N semanas con caída aislada >= X pp bajo la mediana móvil.
+CAIDA_AISLADA_PP: float = 10.0
+MIN_CAIDAS_POCO_CONFIABLE: int = 2
+# Auditoría
+UMBRAL_DISPARIDAD_FP_PP: float = 10.0   # brecha de falsos positivos entre grupos que marca disparidad
+MIN_NEGATIVOS_GRUPO: int = 20           # grupos más chicos se reportan pero no cuentan para la brecha
 # Solo para auditar sesgos. Prohibidas como entrada del modelo (y sus sustitutos).
 VARIABLES_AUDITORIA: tuple[str, ...] = ("genero", "sede", "jornada", "trabaja", "origen")
 VARIABLES_PROHIBIDAS: tuple[str, ...] = VARIABLES_AUDITORIA + (
