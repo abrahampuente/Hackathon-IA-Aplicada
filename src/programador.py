@@ -50,11 +50,14 @@ class Programador:
 
     def __init__(self, ruta_estado: Path = RUTA_ESTADO, ruta_decisiones: Path = RUTA_DECISIONES,
                  ruta_bandeja: Path = config.RUTA_BANDEJA,
-                 texto_recordatorio: Callable[[dict[str, Any]], str] | None = None) -> None:
+                 texto_recordatorio: Callable[[dict[str, Any]], str] | None = None,
+                 enviador_real: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]] | None = None) -> None:
         self.ruta_estado = ruta_estado
         self.ruta_decisiones = ruta_decisiones
         self.ruta_bandeja = ruta_bandeja
         self.texto_recordatorio = texto_recordatorio
+        # Solo para casos con correo_real=True (EST-DEMO). Debe devolver {"ok", "motivo", "hora", ...} sin lanzar.
+        self.enviador_real = enviador_real
         if ruta_estado.is_file():
             self.estado: dict[str, Any] = json.loads(ruta_estado.read_text(encoding="utf-8"))
         else:
@@ -92,13 +95,15 @@ class Programador:
 
     # ---- casos y mensajes ------------------------------------------------------
     def registrar_caso(self, id_seudonimo: str, nivel: str, canal: str, carrera: str,
-                       dato_poco_confiable: bool = False, derivar_humano: bool = False) -> dict[str, Any]:
+                       dato_poco_confiable: bool = False, derivar_humano: bool = False,
+                       correo_real: bool = False) -> dict[str, Any]:
         """Alta (o actualización) de un caso con sus banderas de excepción."""
         caso = self.estado["casos"].setdefault(id_seudonimo, {
             "id_seudonimo": id_seudonimo, "respondio": False, "no_mas": False, "primer_envio": None,
             "recordatorio_creado": False})
         caso.update({"nivel": nivel, "canal": canal, "carrera": carrera,
-                     "dato_poco_confiable": bool(dato_poco_confiable), "derivar_humano": bool(derivar_humano)})
+                     "dato_poco_confiable": bool(dato_poco_confiable), "derivar_humano": bool(derivar_humano),
+                     "correo_real": bool(correo_real)})
         self.guardar()
         return caso
 
@@ -113,7 +118,8 @@ class Programador:
         return exc
 
     def crear_mensaje(self, id_seudonimo: str, texto: str, tipo: str = "invitacion",
-                      apoyo_externo: bool = False, creado: datetime | None = None) -> dict[str, Any]:
+                      apoyo_externo: bool = False, creado: datetime | None = None,
+                      meta: dict[str, Any] | None = None) -> dict[str, Any]:
         """Crea un mensaje PROGRAMADO (+24 h) o REQUIERE_APROBACION si aplica una excepción."""
         caso = self.estado["casos"][id_seudonimo]
         if caso["nivel"] not in ("medio", "alto"):
@@ -132,7 +138,7 @@ class Programador:
             "envio_programado": _iso(creado + VENTANA),
             "estado": "REQUIERE_APROBACION" if exc else "PROGRAMADO", "excepciones": exc,
             "apoyo_externo": bool(apoyo_externo), "enviado_en": None, "enviado_sin_revision": None,
-            "editado": False, "motivo_cancelacion": None,
+            "editado": False, "motivo_cancelacion": None, "meta": meta or {},
         }
         self.estado["mensajes"].append(m)
         self._decision(m, id_seudonimo, "sistema", "programar" if not exc else "requiere_aprobacion",
@@ -172,6 +178,17 @@ class Programador:
         caso = self.estado["casos"][m["id_seudonimo"]]
         if caso["primer_envio"] is None:
             caso["primer_envio"] = _iso(cuando)
+        if caso.get("correo_real") and self.enviador_real is not None:
+            try:
+                r = self.enviador_real(m, caso)
+            except Exception as exc:  # noqa: BLE001 - el envío real nunca debe botar el panel
+                r = {"ok": False, "motivo": type(exc).__name__, "hora": None}
+            m["envio_real"] = r
+            if not r.get("ok") and r.get("motivo") != "modo_simulado":
+                from src.correo import AVISO_FALLO
+                m["aviso_envio"] = AVISO_FALLO
+            self._decision(m, m["id_seudonimo"], "sistema",
+                           "correo_real_enviado" if r.get("ok") else "correo_real_no_enviado", r.get("motivo", ""))
         self.ruta_bandeja.parent.mkdir(parents=True, exist_ok=True)
         with open(self.ruta_bandeja, "a", encoding="utf-8") as fh:
             fh.write(json.dumps({k: m[k] for k in ("id_mensaje", "id_seudonimo", "tipo", "canal", "texto",

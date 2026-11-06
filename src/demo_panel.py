@@ -4,14 +4,15 @@ Todo se sirve desde la caché de Claude cuando OFFLINE=1.
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pandas as pd
 
-from src import apoyos, config, generar_cache, plan_estudio
+from src import apoyos, config, correo, generar_cache, modelo, plan_estudio
 from src.claude_client import ClienteClaude
 from src.programador import Programador
-from src.seudonimizar import payload_para_claude
+from src.seudonimizar import insertar_nombre, payload_para_claude
 
 
 def canal_de(jornada: str) -> str:
@@ -27,6 +28,50 @@ def proveedor_recordatorio(cliente: ClienteClaude) -> Any:
 
 
 N_EXTRA_POCO_CONFIABLE: int = 2
+
+# --- EST-DEMO: estudiante ficticio cuyo contacto es el correo de la lista blanca (envío real de demo) ---
+ID_DEMO: str = "EST-DEMO"
+CARRERA_DEMO: str = "Ingeniería en Informática"
+PERFIL_DEMO: dict[str, Any] = {   # conducta sintética que el modelo clasifica como alto
+    "asistencia": [88, 85, 80, 72, 65, 58, 52, 47],
+    "notas": {"matematica": (4.2, 3.1), "comunicacion": (4.6, 3.8), "especialidad": (3.9, 3.2)},
+}
+
+
+def nombre_demo() -> str:
+    """Nombre que se inserta localmente en el correo de EST-DEMO (NOMBRE_DEMO en .env, opcional)."""
+    return os.getenv("NOMBRE_DEMO", "").strip() or "Estudiante Demo"
+
+
+def fila_est_demo() -> dict[str, Any]:
+    """Fila de EST-DEMO con la predicción del modelo de producción (no está en el dataset ni se audita)."""
+    fila: dict[str, Any] = {"id_seudonimo": ID_DEMO, "nombre_ficticio": nombre_demo(), "carrera": CARRERA_DEMO,
+                            "jornada": "vespertina", "seccion": "DEMO"}
+    for i, a in enumerate(PERFIL_DEMO["asistencia"], 1):
+        fila[f"asistencia_s{i}"] = float(a)
+    for ramo, (p1, p2) in PERFIL_DEMO["notas"].items():
+        fila[f"nota_{ramo}_p1"], fila[f"nota_{ramo}_p2"] = p1, p2
+    df = pd.DataFrame([fila])
+    pred = modelo.predecir(modelo.cargar_modelo(), modelo.construir_features(df), df).iloc[0].to_dict()
+    return {**fila, **pred, "checkin_demo": None}
+
+
+def enviador_real(m: dict[str, Any], caso: dict[str, Any]) -> dict[str, Any]:
+    """Envía por correo real el mensaje de EST-DEMO: el destinatario y el nombre se insertan aquí, localmente."""
+    destino = correo.destinatario_demo()
+    if destino is None:
+        return {"ok": False, "motivo": "lista_blanca_vacia", "hora": None}
+    texto = insertar_nombre(m["texto"], nombre_demo().split()[0])
+    return dict(correo.enviar_correo(destino, correo.ASUNTO, texto))
+
+
+def generar_mensaje_demo(cliente: ClienteClaude) -> tuple[str, dict[str, Any]]:
+    """Invitación de EST-DEMO generada EN VIVO por Claude (sin caché, salvo OFFLINE=1)."""
+    texto = cliente.redactar_invitacion({"carrera": CARRERA_DEMO}, "correo", en_vivo=True, caso=ID_DEMO)
+    en_vivo = cliente.ultimo_origen == "api" and not cliente.ultimo_desde_cache
+    meta = {"en_vivo": en_vivo, "origen": cliente.ultimo_origen,
+            **(cliente.ultima_llamada if en_vivo else {})}
+    return texto, meta
 
 
 def casos() -> list[dict[str, Any]]:
@@ -65,6 +110,11 @@ def sembrar(prog: Programador, cliente: ClienteClaude) -> None:
         if c["nivel"] in ("medio", "alto"):
             texto = cliente.redactar_invitacion(payload_para_claude(c), canal)
             prog.crear_mensaje(c["id_seudonimo"], texto, tipo="invitacion")
+    demo = fila_est_demo()
+    prog.registrar_caso(ID_DEMO, demo["nivel"], "correo", CARRERA_DEMO, correo_real=True)
+    if demo["nivel"] in ("medio", "alto"):
+        texto, meta = generar_mensaje_demo(cliente)
+        prog.crear_mensaje(ID_DEMO, texto, tipo="invitacion", meta=meta)
 
 
 def texto_oferta_apoyo(id_apoyo: str) -> str:

@@ -88,7 +88,7 @@ def _flag(nombre: str, por_defecto: bool = False) -> bool:
 ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "").strip() or "claude-opus-5-5"
 OFFLINE: bool = _flag("OFFLINE")            # True -> claude_client responde desde data/cache_claude.json
 MAX_LLAMADAS_API: int = 200                 # tope por ciclo; superarlo requiere autorización
-CICLO_ACTUAL: int = int(os.getenv("CICLO_ACTUAL", "5"))   # para contar llamadas del ciclo en el log
+CICLO_ACTUAL: int = int(os.getenv("CICLO_ACTUAL", "6"))   # 6 = ciclo de correo real   # para contar llamadas del ciclo en el log
 CLAUDE_EFFORT: str = os.getenv("CLAUDE_EFFORT", "low").strip() or "low"   # tareas cortas: esfuerzo bajo
 RUTA_CACHE_CLAUDE: Path = DATA_DIR / "cache_claude.json"
 RUTA_LOG_API: Path = DATA_DIR / "log_api.jsonl"

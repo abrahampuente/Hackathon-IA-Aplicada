@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     scripts = sorted(
         (p for p in carpeta.glob("ciclo*.py") if re.fullmatch(r"ciclo\d+", p.stem)),
         key=ciclo_num,
-    )
+    ) + sorted(p for p in carpeta.glob("ciclo_*.py"))   # ciclos con nombre (p. ej. ciclo_correo) al final
     summary = []
     for script in scripts:
         print(f"\n### {script.name}", flush=True)

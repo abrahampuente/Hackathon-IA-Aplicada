@@ -1,0 +1,19 @@
+# Tema pensado para proyector: fondo claro, un color principal sobrio y texto grande.
+# Paleta (contraste WCAG AA comprobado, todos >= 4,5:1):
+#   azul principal #1F4E79 · ámbar atención #7A4B00 sobre #FFF1D6 · rojo aprobación #A4161A sobre #FDE8E8
+[theme]
+base = "light"
+primaryColor = "#1F4E79"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F5F8"
+textColor = "#1A1A1A"
+linkColor = "#1F4E79"
+borderColor = "#C9D1DB"
+font = "sans-serif"
+baseFontSize = 18
+headingFontSizes = ["2.1rem", "1.6rem", "1.3rem"]
+headingFontWeights = [700, 650, 600]
+baseRadius = "0.5rem"
+
+[client]
+toolbarMode = "minimal"

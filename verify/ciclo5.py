@@ -27,6 +27,7 @@ import tempfile
 from pathlib import Path
 
 os.environ["OFFLINE"] = "1"   # antes de importar config
+os.environ["MODO_CORREO_REAL"] = "0"   # las pruebas nunca envían correos reales
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -65,10 +66,17 @@ def llamadas_api() -> int:
                for l in config.RUTA_LOG_API.read_text(encoding="utf-8").splitlines() if l.strip())
 
 
+VISTAS = ("Jefe de carrera", "Tutor", "Estudiante", "Auditoría")
+
+
 def app(vista: str) -> AppTest:
-    at = AppTest.from_file(APP, default_timeout=180).run()
-    at.sidebar.radio(key="vista").set_value(vista).run()
-    return at
+    """Carga la app; las vistas son pestañas (todas se renderizan), `vista` solo documenta la intención."""
+    return AppTest.from_file(APP, default_timeout=180).run()
+
+
+def pestana(at: AppTest, vista: str):  # noqa: ANN201
+    """Bloque de la pestaña de una vista (para revisar solo su contenido)."""
+    return next(t for t in at.tabs if t.label == vista)
 
 
 def textos(at: AppTest) -> str:
@@ -268,14 +276,14 @@ def ampliacion_unitarias() -> None:
 # ---------------------------------------------------------------- AppTest
 def con_app() -> None:
     demo_panel.reiniciar(ESTADO_PANEL)
-    errores = {}
-    for v in ("Jefe de carrera", "Tutor", "Estudiante", "Auditoría"):
-        at = app(v)
-        errores[v] = [str(e.value)[:200] for e in at.exception]
+    at = app("todas")
+    errores = {"global": [str(e.value)[:200] for e in at.exception]}
+    for v in VISTAS:
+        bloque = pestana(at, v)
+        errores[v] = [str(e.value)[:200] for e in bloque.exception] + ([] if len(bloque.children) else ["vacía"])
     record("C1 Las 4 vistas cargan sin excepciones", not any(errores.values()), str(errores))
 
-    at = app("Jefe de carrera")
-    txt = textos(at)
+    txt = textos(pestana(at, "Jefe de carrera"))
     est = pd.read_csv(config.RUTA_ESTUDIANTES, encoding="utf-8")
     nombres = [n for n in est["nombre_ficticio"] if n in txt]
     ids = re.findall(r"EST-\d{4}", txt)
@@ -291,11 +299,12 @@ def con_app() -> None:
         return at
 
     at_ok = mi_plan("EST-0197")
-    tabla = [d.value for d in at_ok.dataframe if "subtarea" in getattr(d.value, "columns", [])]
+    tabla = [d.value for d in pestana(at_ok, "Estudiante").dataframe if "subtarea" in getattr(d.value, "columns", [])]
     plan_ok = bool(tabla) and len(tabla[0]) > 0 and not at_ok.exception
     at_no = mi_plan("EST-0389")
-    aviso = [w.value for w in at_no.warning if "No alcanza" in w.value]
-    aviso_ok = bool(aviso) and not any("subtarea" in getattr(d.value, "columns", []) for d in at_no.dataframe)
+    est_no = pestana(at_no, "Estudiante")
+    aviso = [w.value for w in est_no.warning if "No alcanza" in w.value]
+    aviso_ok = bool(aviso) and not any("subtarea" in getattr(d.value, "columns", []) for d in est_no.dataframe)
     record("C13 Mi plan: plan para estudiante demo y aviso en el caso imposible", plan_ok and aviso_ok,
            f"EST-0197: {len(tabla[0]) if tabla else 0} bloques; EST-0389: {aviso[0][:70] if aviso else 'sin aviso'}…")
 
@@ -303,13 +312,14 @@ def con_app() -> None:
     at_ok.button(key="guardar_plan_EST-0197").click().run()
     tutor = app("Tutor")
     tutor.selectbox(key="caso_tutor").set_value("EST-0197").run()
-    oculto = (any("no ha compartido" in c.value for c in tutor.caption)
-              and not any("subtarea" in getattr(d.value, "columns", []) for d in tutor.dataframe))
+    tt = pestana(tutor, "Tutor")
+    oculto = (any("no ha compartido" in c.value for c in tt.caption)
+              and not any("subtarea" in getattr(d.value, "columns", []) for d in tt.dataframe))
     at_ok.checkbox(key="compartir_EST-0197").check().run()
     at_ok.button(key="guardar_plan_EST-0197").click().run()
     tutor2 = app("Tutor")
     tutor2.selectbox(key="caso_tutor").set_value("EST-0197").run()
-    visible = any("subtarea" in getattr(d.value, "columns", []) for d in tutor2.dataframe)
+    visible = any("subtarea" in getattr(d.value, "columns", []) for d in pestana(tutor2, "Tutor").dataframe)
     record("C12 El tutor no ve el plan si el estudiante no lo compartió", oculto and visible,
            f"no compartido oculto={oculto}, compartido visible={visible}")
 
@@ -317,9 +327,9 @@ def con_app() -> None:
     demo_panel.reiniciar(ESTADO_PANEL)
     at = app("Estudiante")
     at.selectbox(key="est_sel").set_value("EST-0075").run()
-    vacio = any("No tienes mensajes" in i.value for i in at.info)
+    vacio = any("No tienes mensajes" in i.value for i in pestana(at, "Estudiante").info)
     at.sidebar.button(key="av24").click().run()
-    llego = not any("No tienes mensajes" in i.value for i in at.info)
+    llego = not any("No tienes mensajes" in i.value for i in pestana(at, "Estudiante").info)
     at.sidebar.button(key="av7").click().run()
     estado = json.loads(RUTA_ESTADO.read_text(encoding="utf-8"))
     rec = [m for m in estado["mensajes"] if m["id_seudonimo"] == "EST-0075" and m["tipo"] == "recordatorio"]

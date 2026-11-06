@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import unicodedata
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -245,6 +246,8 @@ class ClienteClaude:
         self.llamadas: int = 0
         self.ultimo_origen: Origen = "plantilla_local"
         self.ultimo_desde_cache: bool = False
+        self.ultima_llamada: dict[str, Any] = {}      # modelo y segundos de la última llamada real
+        self.caso_log: str | None = None               # id seudonimizado para auditar el log por caso
         self._cache: dict[str, Any] = self._leer_cache()
         self._sdk: Any = None
 
@@ -270,7 +273,8 @@ class ClienteClaude:
     def _registrar(self, evento: dict[str, Any]) -> None:
         self.ruta_log.parent.mkdir(parents=True, exist_ok=True)
         evento = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                  "ciclo": config.CICLO_ACTUAL, "modelo": self.modelo, **evento}
+                  "ciclo": config.CICLO_ACTUAL, "modelo": self.modelo,
+                  **({"caso": self.caso_log} if self.caso_log else {}), **evento}
         with open(self.ruta_log, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(evento, ensure_ascii=False) + "\n")
 
@@ -322,6 +326,7 @@ class ClienteClaude:
         if output_config:
             kwargs["output_config"] = output_config
         self.llamadas += 1
+        t0 = time.monotonic()
         try:
             if self.modelo in _MODELOS_FALLBACK:
                 resp = sdk.beta.messages.create(betas=["server-side-fallback-2026-07-01"],
@@ -334,6 +339,7 @@ class ClienteClaude:
         except anthropic.APIConnectionError:
             self._registrar({**base, "tipo": "llamada_api", "resultado": "error_conexion"})
             return None
+        self.ultima_llamada = {"modelo": resp.model, "segundos": round(time.monotonic() - t0, 2)}
         texto = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
         ok = resp.stop_reason not in ("refusal", "max_tokens") and bool(texto)
         self._registrar({**base, "tipo": "llamada_api", "resultado": "ok" if ok else "invalida",
@@ -342,12 +348,16 @@ class ClienteClaude:
         return texto if ok else None
 
     def _resolver(self, tarea: str, datos: Any, generar: Callable[[], Any | None],
-                  validar: Callable[[Any], list[str]], local: Callable[[], Any]) -> Any:
-        """Online -> valida -> caché; si falla o es offline -> caché -> respuesta local."""
+                  validar: Callable[[Any], list[str]], local: Callable[[], Any],
+                  forzar_api: bool = False) -> Any:
+        """Online -> valida -> caché; si falla o es offline -> caché -> respuesta local.
+
+        forzar_api: ignora `preferir_cache` (generación en vivo); con OFFLINE igual usa la caché.
+        """
         k = self.clave(tarea, datos)
         self.ultimo_desde_cache = False
         previo = self._cache["entradas"].get(k)
-        if (self.preferir_cache and previo and previo["origen"] == "api"
+        if (self.preferir_cache and not forzar_api and previo and previo["origen"] == "api"
                 and not validar(previo["respuesta"])):
             self.ultimo_origen, self.ultimo_desde_cache = "api", True
             return previo["respuesta"]
@@ -392,12 +402,21 @@ class ClienteClaude:
                               lambda: _explicacion_local(datos))
 
     def redactar_invitacion(self, payload: dict[str, Any], canal: Canal = "correo",
-                            tipo: Literal["invitacion", "recordatorio"] = "invitacion") -> str:
+                            tipo: Literal["invitacion", "recordatorio"] = "invitacion",
+                            en_vivo: bool = False, caso: str | None = None) -> str:
         """Invitación no estigmatizante (<= 120 palabras, tuteo, {NOMBRE}, ¿Por qué recibí esto?, salida).
 
         tipo="recordatorio": más breve y sin presión; mismo filtro de palabras prohibidas.
-        Solo usa la carrera del payload: riesgo, nivel y razones NO se envían para esta tarea.
+        en_vivo=True: llama a Claude aunque haya caché (salvo OFFLINE); `caso` etiqueta el log.
+        Solo usa la carrera del payload: riesgo, nivel, razones y datos de contacto NO se envían.
         """
+        self.caso_log = caso
+        try:
+            return self._redactar(payload, canal, tipo, en_vivo)
+        finally:
+            self.caso_log = None
+
+    def _redactar(self, payload: dict[str, Any], canal: Canal, tipo: str, en_vivo: bool) -> str:
         datos = {"carrera": payload["carrera"], "canal": canal}
         if tipo == "recordatorio":
             datos["tipo"] = "recordatorio"   # la invitación conserva su clave de caché original
@@ -414,7 +433,7 @@ class ClienteClaude:
             return None
 
         return self._resolver("redactar_invitacion", datos, generar, problemas_invitacion,
-                              lambda: fija[canal].replace("{carrera}", datos["carrera"]))
+                              lambda: fija[canal].replace("{carrera}", datos["carrera"]), forzar_api=en_vivo)
 
     def clasificar_checkin(self, texto: str) -> ClasificacionCheckin:
         """Clasifica un check-in. Ante señales de crisis: derivar_humano=True y urgencia alta, siempre."""
