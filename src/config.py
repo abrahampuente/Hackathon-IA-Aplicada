@@ -86,5 +86,17 @@ def _flag(nombre: str, por_defecto: bool = False) -> bool:
 
 
 ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "").strip() or "claude-opus-5-5"
-OFFLINE: bool = _flag("OFFLINE")            # True -> claude_client devuelve textos de plantilla sin llamar a la API
+OFFLINE: bool = _flag("OFFLINE")            # True -> claude_client responde desde data/cache_claude.json
 MAX_LLAMADAS_API: int = 200                 # tope por ciclo; superarlo requiere autorización
+CICLO_ACTUAL: int = int(os.getenv("CICLO_ACTUAL", "4"))   # para contar llamadas del ciclo en el log
+CLAUDE_EFFORT: str = os.getenv("CLAUDE_EFFORT", "low").strip() or "low"   # tareas cortas: esfuerzo bajo
+RUTA_CACHE_CLAUDE: Path = DATA_DIR / "cache_claude.json"
+RUTA_LOG_API: Path = DATA_DIR / "log_api.jsonl"
+
+# Invitaciones al estudiante: nunca mencionan riesgo ni nada derivado del modelo.
+MAX_PALABRAS_INVITACION: int = 120
+# Raíces sin tildes, comparadas en minúsculas y sin tildes.
+PALABRAS_PROHIBIDAS_INVITACION: tuple[str, ...] = (
+    "riesg", "%", "porcentaj", "por ciento", "desert", "deserc", "abandon",
+    "alerta", "predic", "probabil",
+)

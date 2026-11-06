@@ -1,11 +1,16 @@
-Clasifica el siguiente check-in breve escrito por un estudiante de primer año.
+Clasifica este check-in breve escrito por un estudiante de primer año de un instituto profesional.
 
-Categorías posibles: academico, laboral, personal, economico, bienestar, sin_alerta.
-Marca requiere_tutor = true si el texto expresa intención de abandonar, angustia significativa
-o una situación que una persona debe revisar. Ante cualquier señal de riesgo para la integridad
-del estudiante, requiere_tutor = true siempre.
+Campos:
+- necesidad: economica | academica | emocional | logistica | ninguna
+  (logistica = horarios, trabajo, traslados, cuidado de familiares)
+- urgencia: baja | media | alta
+- resumen: una frase neutra, sin repetir datos personales
+- derivar_humano: true si una persona del equipo debe revisarlo
 
-Responde solo con JSON: {{"categoria": "...", "requiere_tutor": true|false, "resumen": "una frase"}}
+Regla de seguridad, sin excepción: si el texto sugiere una crisis o riesgo para la persona (ideas de hacerse daño, de no querer vivir, violencia, desesperanza intensa), entonces derivar_humano = true y urgencia = alta.
+Si expresa intención de dejar los estudios o angustia importante, derivar_humano = true.
+
+Responde solo con un objeto JSON con esas 4 claves.
 
 Check-in:
 """{texto}"""

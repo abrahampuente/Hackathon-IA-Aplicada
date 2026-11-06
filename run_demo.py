@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from src import auditoria, config, generar_datos, modelo
+from src import apoyos, auditoria, config, generar_datos, modelo, plan_estudio
 
 
 def ejecutar_pipeline() -> dict[str, Any]:
@@ -76,6 +76,8 @@ def ejecutar_pipeline() -> dict[str, Any]:
     }
     config.RUTA_METRICAS.write_text(json.dumps(metricas, ensure_ascii=False, indent=2), encoding="utf-8")
     config.RUTA_BANDEJA.touch(exist_ok=True)
+    apoyos.guardar_catalogo()
+    plan_estudio.guardar_datos_plan(pd.read_csv(config.RUTA_DEMO, encoding="utf-8"))
     return {"metricas": metricas, "auditoria": reporte}
 
 

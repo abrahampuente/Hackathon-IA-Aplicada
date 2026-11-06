@@ -49,7 +49,10 @@ Este sistema estima el riesgo de deserción de estudiantes de primer año, con f
 | `src/modelo.py` | Modelo interpretable, nivel de riesgo y 3 razones |
 | `src/auditoria.py` | Métricas por grupo demográfico |
 | `src/seudonimizar.py` | Seudónimos y filtro de datos personales antes de llamar a Claude |
-| `src/claude_client.py` | Llamadas a Claude (con modo offline y tope de 200 llamadas) |
+| `src/claude_client.py` | Llamadas a Claude: explicar al tutor, invitación, check-ins, resumen por sección, sugerir apoyos y estimar horas (con caché offline, log y tope de 200 llamadas) |
+| `src/generar_cache.py` | Ejecuta los usos de Claude sobre los 12 casos demo y guarda `data/cache_claude.json` |
+| `src/apoyos.py` | Catálogo de apoyos de ejemplo y flujo propuesta → tutor → consentimiento |
+| `src/plan_estudio.py` | Planificador determinista de bloques de estudio (sin Claude) |
 | `prompts/` | Plantillas de los prompts |
 | `app.py` | Panel Streamlit |
 | `run_demo.py` | Pipeline completo con un solo comando |

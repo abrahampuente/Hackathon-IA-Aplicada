@@ -120,6 +120,31 @@ def resumen_etapa(prob_riesgo_pct: np.ndarray, estudiantes: pd.DataFrame) -> dic
     }
 
 
+MIN_N_SECCION: int = 10   # no se resumen secciones más chicas (evita reidentificar)
+
+
+def agregados_por_seccion(estudiantes: pd.DataFrame, predicciones: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    """Estadísticas agregadas por sección (sin nombres ni IDs) para el resumen de jefatura."""
+    df = estudiantes.merge(predicciones[["id_seudonimo", "nivel"]], on="id_seudonimo")
+    notas = list(config.COLS_NOTAS)
+    salida: dict[str, dict[str, Any]] = {}
+    for seccion, t in df.groupby("seccion"):
+        if len(t) < MIN_N_SECCION:
+            continue
+        salida[str(seccion)] = {
+            "seccion": str(seccion),
+            "carrera": str(t["carrera"].iloc[0]),
+            "jornada": str(t["jornada"].iloc[0]),
+            "n_estudiantes": int(len(t)),
+            "asistencia_por_semana": [round(float(t[c].mean()), 1) for c in config.COLS_ASISTENCIA],
+            "nota_promedio": round(float(t[notas].to_numpy().mean()), 2),
+            "pct_notas_rojas": round(float((t[notas] < 4.0).to_numpy().mean() * 100), 1),
+            "pct_alerta": round(float(t["nivel"].isin(["medio", "alto"]).mean() * 100), 1),
+            "pct_alto": round(float((t["nivel"] == "alto").mean() * 100), 1),
+        }
+    return salida
+
+
 def guardar_json(datos: dict[str, Any], ruta: Path = config.RUTA_AUDITORIA_JSON) -> Path:
     """Escribe un dict como JSON UTF-8 legible."""
     ruta.parent.mkdir(parents=True, exist_ok=True)
