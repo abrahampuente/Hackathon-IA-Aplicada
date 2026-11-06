@@ -13,11 +13,11 @@ def main() -> int:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     print("[1/4] Generando datos sintéticos...")
-    estudiantes, registros = generar_datos.generar_todo()
+    estudiantes = generar_datos.generar_todo().estudiantes
 
     print("[2/4] Construyendo features y entrenando...")
-    features = modelo.construir_features(registros)
-    etiquetas = estudiantes.get("deserta")
+    features = modelo.construir_features(estudiantes)
+    etiquetas = estudiantes["deserto"]
     m = modelo.entrenar(features, etiquetas)
 
     print("[3/4] Prediciendo riesgo...")

@@ -8,7 +8,9 @@ from typing import Any
 
 import pandas as pd
 
-COLUMNAS_IDENTIFICADORAS: tuple[str, ...] = ("id_estudiante", "nombre", "rut", "email", "telefono")
+COLUMNAS_IDENTIFICADORAS: tuple[str, ...] = (
+    "nombre_ficticio", "correo_ficticio", "nombre", "rut", "email", "correo", "telefono",
+)
 
 
 def seudonimo(id_estudiante: str, sal: str) -> str:
@@ -20,7 +22,7 @@ def seudonimo(id_estudiante: str, sal: str) -> str:
 
 
 def seudonimizar_df(df: pd.DataFrame, sal: str) -> pd.DataFrame:
-    """Reemplaza `id_estudiante` por su seudónimo y elimina otras columnas identificadoras.
+    """Reemplaza `id_seudonimo` por un seudónimo con sal y elimina las columnas identificadoras.
 
     STUB (ciclo 1): devuelve una copia sin cambios.
     """

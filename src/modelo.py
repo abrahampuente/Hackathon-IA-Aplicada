@@ -14,7 +14,7 @@ from src import config
 
 Nivel = Literal["bajo", "medio", "alto"]
 COLUMNAS_PREDICCION: list[str] = [
-    "id_estudiante", "prob_riesgo", "nivel", "razon_1", "razon_2", "razon_3",
+    "id_seudonimo", "prob_riesgo", "nivel", "razon_1", "razon_2", "razon_3",
 ]
 
 
@@ -34,12 +34,12 @@ def validar_features(columnas: list[str] | tuple[str, ...]) -> None:
         raise ValueError(f"Variables prohibidas como entrada del modelo: {prohibidas}")
 
 
-def construir_features(registros: pd.DataFrame) -> pd.DataFrame:
-    """Agrega registros semanales en una fila por estudiante con `FEATURES_MODELO`.
+def construir_features(estudiantes: pd.DataFrame) -> pd.DataFrame:
+    """Calcula `FEATURES_MODELO` (una fila por estudiante) desde asistencia y notas del export.
 
-    STUB (ciclo 1): devuelve un DataFrame vacío con id + features.
+    STUB (ciclo 2): devuelve un DataFrame vacío con id + features.
     """
-    return pd.DataFrame(columns=["id_estudiante", *config.FEATURES_MODELO])
+    return pd.DataFrame(columns=["id_seudonimo", *config.FEATURES_MODELO])
 
 
 def entrenar(features: pd.DataFrame, etiquetas: pd.Series) -> ModeloRiesgo:
@@ -47,7 +47,7 @@ def entrenar(features: pd.DataFrame, etiquetas: pd.Series) -> ModeloRiesgo:
 
     STUB (ciclo 1): valida las columnas y devuelve un modelo sin estimador.
     """
-    validar_features([c for c in features.columns if c != "id_estudiante"])
+    validar_features([c for c in features.columns if c != "id_seudonimo"])
     return ModeloRiesgo()
 
 

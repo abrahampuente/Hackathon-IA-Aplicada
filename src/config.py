@@ -16,8 +16,9 @@ load_dotenv(ROOT / ".env", override=False)
 # --- Rutas -----------------------------------------------------------------
 DATA_DIR: Path = ROOT / "data"
 PROMPTS_DIR: Path = ROOT / "prompts"
-RUTA_ESTUDIANTES: Path = DATA_DIR / "estudiantes.csv"          # export simulado VIVO (perfil)
-RUTA_REGISTROS: Path = DATA_DIR / "registros_academicos.csv"   # asistencia y notas por semana
+RUTA_ESTUDIANTES: Path = DATA_DIR / "estudiantes.csv"          # export simulado VIVO
+RUTA_DEMO: Path = DATA_DIR / "estudiantes_demo.csv"            # 12 casos curados para el pitch
+RUTA_README_DATOS: Path = DATA_DIR / "README_datos.md"         # documentación del dataset y del sesgo
 RUTA_PREDICCIONES: Path = DATA_DIR / "predicciones.csv"
 RUTA_AUDITORIA: Path = DATA_DIR / "auditoria.csv"
 RUTA_BANDEJA: Path = DATA_DIR / "bandeja_simulada.jsonl"       # mensajes que NUNCA se envían
@@ -41,12 +42,18 @@ FEATURES_MODELO: tuple[str, ...] = (
 VARIABLES_AUDITORIA: tuple[str, ...] = ("genero", "sede", "jornada", "trabaja", "origen")
 VARIABLES_PROHIBIDAS: tuple[str, ...] = VARIABLES_AUDITORIA + (
     "comuna", "edad", "nacionalidad", "colegio_origen", "situacion_pago",
+    "carrera", "seccion",  # sustitutos: la sección codifica sede y jornada
+    "nombre_ficticio", "correo_ficticio", "checkin_texto",
 )
 
 # --- Datos sintéticos --------------------------------------------------------
 N_ESTUDIANTES: int = 600
-N_SEMANAS: int = 12
+N_SEMANAS: int = 8
 SEMILLA: int = 2026
+RAMOS: tuple[str, ...] = ("matematica", "comunicacion", "especialidad")
+COLS_ASISTENCIA: tuple[str, ...] = tuple(f"asistencia_s{i}" for i in range(1, N_SEMANAS + 1))
+COLS_NOTAS: tuple[str, ...] = tuple(f"nota_{r}_p{p}" for r in RAMOS for p in (1, 2))
+DOMINIO_CORREO_FICTICIO: str = "ejemplo.cl"
 
 
 # --- Claude ------------------------------------------------------------------
