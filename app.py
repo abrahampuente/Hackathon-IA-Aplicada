@@ -46,6 +46,10 @@ st.markdown("""<style>
 .encabezado p { margin:0.2rem 0 0; color:#4A5562; font-size:1.15rem; }
 .stTabs [role="tab"] p, .stTabs [role="tab"] { font-size:1.2rem !important; font-weight:650; }
 .stTabs [role="tab"] { padding: 0.35rem 0.9rem; }
+/* Vista tutor: el caso abierto queda fijo a la derecha mientras se recorre la bandeja */
+div[data-testid="stColumn"]:has(#detalle-caso) {
+  position: sticky; top: 3.2rem; align-self: flex-start;
+  max-height: calc(100vh - 4rem); overflow-y: auto; padding-right: 0.4rem; }
 </style>""", unsafe_allow_html=True)
 
 NIVEL_BADGE = {"alto": ("b-alto", "■ Alto"), "medio": ("b-medio", "▲ Medio"), "bajo": ("b-bajo", "● Bajo")}
@@ -215,147 +219,152 @@ def vista_tutor() -> None:
     a.metric("⏱ Programados", sum(m["estado"] == "PROGRAMADO" for m in pend))
     b.metric("⚠ Requieren tu aprobación", sum(m["estado"] == "REQUIERE_APROBACION" for m in pend))
     c.metric("Sin respuesta tras recordatorio", len(prog.sin_respuesta()))
-    st.subheader("Bandeja de mensajes programados")
-    st.caption("Primero los que requieren tu aprobación; luego los programados por hora de envío. "
-               "Si no los revisas, los programados salen solos al cumplirse 24 h.")
-    if not pend:
-        st.info("No hay mensajes pendientes.")
-    orden = ([m for m in pend if m["estado"] == "REQUIERE_APROBACION"]
-             + [m for m in pend if m["estado"] != "REQUIERE_APROBACION"])
-    for i in range(0, len(orden), 3):
-        cols = st.columns(3)
-        for col, m in zip(cols, orden[i:i + 3]):
+    seleccionado = st.session_state.get("caso_tutor")
+    col_b, col_d = st.columns([2, 3], gap="large")
+    with col_b:
+        st.subheader("Bandeja de mensajes")
+        st.caption("Primero los que requieren tu aprobación; luego los programados por hora de envío. "
+                   "Si no los revisas, los programados salen solos al cumplirse 24 h.")
+        if not pend:
+            st.info("No hay mensajes pendientes.")
+        orden = ([m for m in pend if m["estado"] == "REQUIERE_APROBACION"]
+                 + [m for m in pend if m["estado"] != "REQUIERE_APROBACION"])
+        for m in orden:
             nivel = prog.estado["casos"][m["id_seudonimo"]]["nivel"]
             aprob = m["estado"] == "REQUIERE_APROBACION"
-            with col.container(border=True):
-                html(f"{badge_estado(m['estado'])} {badge_nivel(nivel)}")
+            abierto = m["id_seudonimo"] == seleccionado
+            with st.container(border=True):
+                html(f"{badge_estado(m['estado'])} {badge_nivel(nivel)}"
+                     + (" <span class='badge b-ok'>▶ Abierto</span>" if abierto else ""))
                 html(f"<div class='cuenta{' aprob' if aprob else ''}'>"
                      f"{'No se envía solo' if aprob else 'Sale en ' + faltan(m, prog)}</div>"
                      f"<div class='sub'>{m['id_seudonimo']} · {m['tipo']} · {m['canal']} · "
                      f"envío {m['envio_programado'].replace('T', ' ')}</div>")
                 if aprob:
                     html("<div class='sub'>Motivo: " + ", ".join(NOMBRE_EXC[e] for e in m["excepciones"]) + "</div>")
-                st.button("Abrir caso", key=f"abrir_{m['id_mensaje']}", on_click=abrir_caso, args=(m["id_seudonimo"],))
-    if prog.sin_respuesta():
-        st.warning("Sin respuesta tras el recordatorio (decide si contactar en persona): "
-                   + ", ".join(prog.sin_respuesta()))
+                st.button("Abrir caso", key=f"abrir_{m['id_mensaje']}", on_click=abrir_caso,
+                          args=(m["id_seudonimo"],), type="primary" if abierto else "secondary")
+        if prog.sin_respuesta():
+            st.warning("Sin respuesta tras el recordatorio (decide si contactar en persona): "
+                       + ", ".join(prog.sin_respuesta()))
 
-    st.divider()
-    ids = list(prog.estado["casos"])
-    id_ = st.selectbox("Abrir caso", ids, key="caso_tutor")
-    caso = prog.estado["casos"][id_]
-    fila = perfil.loc[id_] if id_ in perfil.index else None
-    st.subheader(f"Caso {id_}" + (f" · {fila['nombre_ficticio']}" if fila is not None else ""))
-    if fila is not None:
-        with st.container(border=True):
-            html(f"{badge_nivel(fila['nivel'])} &nbsp; <b>Riesgo estimado: {fila['prob_riesgo']:.0f}%</b>"
-                 " <span class='sub'>(estimación del modelo; decide el tutor)</span>")
-            st.markdown("**Razones del modelo**\n" + "\n".join(f"- {fila[f'razon_{k}']}" for k in (1, 2, 3)))
-            p = payload_para_claude({**fila.to_dict(), "id_seudonimo": id_})
-            st.markdown("**Explicación de Claude**")
-            st.text(cliente.explicar_a_tutor(p))
-    if caso["dato_poco_confiable"]:
-        st.warning("⚠ Dato de asistencia poco confiable: hay caídas aisladas que podrían ser marcas erróneas "
-                   "(por ejemplo, atrasos). Considéralo antes de decidir.")
+    with col_d:
+        html("<div id='detalle-caso'></div>")
+        ids = list(prog.estado["casos"])
+        id_ = st.selectbox("Caso abierto", ids, key="caso_tutor")
+        caso = prog.estado["casos"][id_]
+        fila = perfil.loc[id_] if id_ in perfil.index else None
+        st.subheader(f"Caso {id_}" + (f" · {fila['nombre_ficticio']}" if fila is not None else ""))
+        if fila is not None:
+            with st.container(border=True):
+                html(f"{badge_nivel(fila['nivel'])} &nbsp; <b>Riesgo estimado: {fila['prob_riesgo']:.0f}%</b>"
+                     " <span class='sub'>(estimación del modelo; decide el tutor)</span>")
+                st.markdown("**Razones del modelo**\n" + "\n".join(f"- {fila[f'razon_{k}']}" for k in (1, 2, 3)))
+                p = payload_para_claude({**fila.to_dict(), "id_seudonimo": id_})
+                st.markdown("**Explicación de Claude**")
+                st.text(cliente.explicar_a_tutor(p))
+        if caso["dato_poco_confiable"]:
+            st.warning("⚠ Dato de asistencia poco confiable: hay caídas aisladas que podrían ser marcas erróneas "
+                       "(por ejemplo, atrasos). Considéralo antes de decidir.")
 
-    # check-in y apoyos
-    chk = prog.estado.get("checkins", {}).get(id_)
-    if chk:
-        cl = chk["clasificacion"]
-        st.markdown(f"**Check-in:** “{chk['texto']}”  \nNecesidad: {cl['necesidad']} · urgencia: {cl['urgencia']}"
-                    + (" · **requiere una persona**" if cl["derivar_humano"] else ""))
-        if cl["necesidad"] != "ninguna":
-            cat = {x["id"]: x for x in apoyos.cargar_catalogo()}
-            st.markdown("**Apoyos sugeridos** (catálogo de ejemplo: validar con Asuntos Estudiantiles)")
-            for s in cliente.sugerir_apoyos(cl["necesidad"], chk["texto"]):
-                ap = cat[s["id"]]
+        # check-in y apoyos
+        chk = prog.estado.get("checkins", {}).get(id_)
+        if chk:
+            cl = chk["clasificacion"]
+            st.markdown(f"**Check-in:** “{chk['texto']}”  \nNecesidad: {cl['necesidad']} · urgencia: {cl['urgencia']}"
+                        + (" · **requiere una persona**" if cl["derivar_humano"] else ""))
+            if cl["necesidad"] != "ninguna":
+                cat = {x["id"]: x for x in apoyos.cargar_catalogo()}
+                st.markdown("**Apoyos sugeridos** (catálogo de ejemplo: validar con Asuntos Estudiantiles)")
+                for s in cliente.sugerir_apoyos(cl["necesidad"], chk["texto"]):
+                    ap = cat[s["id"]]
+                    col1, col2 = st.columns([4, 1])
+                    col1.markdown(f"**{ap['nombre']}** ({'externo' if ap['tipo'] == 'externo' else 'interno'}) — "
+                                  f"{s['razon']}  \nCómo postular: {ap['como_postular']}")
+                    if col2.button("Ofrecer apoyo", key=f"ofrecer_{id_}_{ap['id']}"):
+                        demo_panel.ofrecer_apoyo(prog, gestor, id_, ap["id"], s["razon"])
+                        st.success("Apoyo agregado al mensaje." + (" Al ser externo, requiere tu aprobación y la "
+                                                                    "autorización del estudiante." if ap["tipo"] == "externo" else ""))
+                cliente.guardar_cache()
+        props = gestor.propuestas_de(id_)
+        if props:
+            st.markdown("**Apoyos propuestos**")
+            for p in props:
+                etiqueta = gestor.etiqueta_estado(p)
+                if p["tipo"] == "externo" and p["estado"] == "pendiente_consentimiento" and gestor.consentimiento_vigente(p["id_propuesta"]):
+                    etiqueta = "Autorizado por el estudiante: puedes derivar"
                 col1, col2 = st.columns([4, 1])
-                col1.markdown(f"**{ap['nombre']}** ({'externo' if ap['tipo'] == 'externo' else 'interno'}) — "
-                              f"{s['razon']}  \nCómo postular: {ap['como_postular']}")
-                if col2.button("Ofrecer apoyo", key=f"ofrecer_{id_}_{ap['id']}"):
-                    demo_panel.ofrecer_apoyo(prog, gestor, id_, ap["id"], s["razon"])
-                    st.success("Apoyo agregado al mensaje." + (" Al ser externo, requiere tu aprobación y la "
-                                                                "autorización del estudiante." if ap["tipo"] == "externo" else ""))
-            cliente.guardar_cache()
-    props = gestor.propuestas_de(id_)
-    if props:
-        st.markdown("**Apoyos propuestos**")
-        for p in props:
-            etiqueta = gestor.etiqueta_estado(p)
-            if p["tipo"] == "externo" and p["estado"] == "pendiente_consentimiento" and gestor.consentimiento_vigente(p["id_propuesta"]):
-                etiqueta = "Autorizado por el estudiante: puedes derivar"
-            col1, col2 = st.columns([4, 1])
-            col1.markdown(f"- {p['id_apoyo']}: {etiqueta}")
-            if p["tipo"] == "externo" and p["estado"] != "activo" and col2.button("Derivar", key=f"derivar_{p['id_propuesta']}"):
+                col1.markdown(f"- {p['id_apoyo']}: {etiqueta}")
+                if p["tipo"] == "externo" and p["estado"] != "activo" and col2.button("Derivar", key=f"derivar_{p['id_propuesta']}"):
+                    try:
+                        gestor.activar(p["id_propuesta"], aprobado_por_tutor=True)
+                        st.success("Derivado con autorización registrada.")
+                    except PermissionError as exc:
+                        st.error(str(exc))
+
+        # mensaje pendiente
+        pendientes = [m for m in prog.mensajes_de(id_) if m["estado"] in ("PROGRAMADO", "REQUIERE_APROBACION")]
+        for m in pendientes:
+            with st.container(border=True):
+                aprob = m["estado"] == "REQUIERE_APROBACION"
+                html(f"{badge_estado(m['estado'])} &nbsp; <b>Mensaje {m['id_mensaje']}</b> "
+                     f"<span class='sub'>({m['tipo']}, {m['canal']}) · envío programado "
+                     f"{m['envio_programado'].replace('T', ' ')}</span>")
+                html(f"<div class='cuenta{' aprob' if aprob else ''}'>"
+                     f"{'No se enviará solo: necesita tu aprobación' if aprob else 'Sale en ' + faltan(m, prog)}</div>")
+                if aprob:
+                    st.error("Requiere tu aprobación: " + ", ".join(NOMBRE_EXC[e] for e in m["excepciones"])
+                             + ". No se enviará solo.")
+                meta = m.get("meta") or {}
+                if meta.get("en_vivo"):
+                    st.success(f"Generado en vivo por Claude · {meta.get('modelo')} · {meta.get('segundos')} s")
+                elif id_ == demo_panel.ID_DEMO:
+                    st.info(f"Generado desde {meta.get('origen', 'caché')} (modo OFFLINE o API no disponible).")
+                if caso.get("correo_real"):
+                    st.caption("Este caso recibe un correo REAL (solo a la lista blanca) cuando el mensaje se envía."
+                               if correo.modo_real() else "Correo real desactivado: irá solo a la bandeja simulada.")
+                    if st.button("Regenerar en vivo con Claude", key=f"regenerar_{m['id_mensaje']}"):
+                        nuevo, meta_n = demo_panel.generar_mensaje_demo(cliente)
+                        prog.editar(m["id_mensaje"], nuevo)
+                        m["meta"] = meta_n
+                        prog.guardar()
+                        cliente.guardar_cache()
+                        st.rerun()
+                texto = st.text_area("Mensaje (editable)", m["texto"], height=220, key=f"txt_{m['id_mensaje']}")
+                motivo = st.text_input("Motivo (obligatorio para cancelar)", key=f"motivo_{m['id_mensaje']}")
+                b1, b2, b3, b4 = st.columns(4)
                 try:
-                    gestor.activar(p["id_propuesta"], aprobado_por_tutor=True)
-                    st.success("Derivado con autorización registrada.")
-                except PermissionError as exc:
+                    if b1.button("Guardar edición", key=f"editar_{m['id_mensaje']}"):
+                        prog.editar(m["id_mensaje"], texto)
+                        st.success("Editado: sigue programado con el texto nuevo.")
+                    etiqueta = "Aprobar y enviar" if m["estado"] == "REQUIERE_APROBACION" else "Enviar ahora"
+                    if b2.button(etiqueta, key=f"enviar_{m['id_mensaje']}"):
+                        if texto != m["texto"]:
+                            prog.editar(m["id_mensaje"], texto)
+                        prog.enviar_ahora(m["id_mensaje"])
+                        st.success("Enviado a la bandeja simulada.")
+                    if b3.button("Cancelar", key=f"cancelar_{m['id_mensaje']}"):
+                        prog.cancelar(m["id_mensaje"], motivo)
+                        st.success("Envío cancelado.")
+                    if b4.button("Contactar en persona", key=f"persona_{m['id_mensaje']}"):
+                        prog.contactar_en_persona(m["id_mensaje"], motivo)
+                        st.success("Envío automático cancelado: contacto en persona.")
+                except ValueError as exc:
                     st.error(str(exc))
 
-    # mensaje pendiente
-    pendientes = [m for m in prog.mensajes_de(id_) if m["estado"] in ("PROGRAMADO", "REQUIERE_APROBACION")]
-    for m in pendientes:
-        with st.container(border=True):
-            aprob = m["estado"] == "REQUIERE_APROBACION"
-            html(f"{badge_estado(m['estado'])} &nbsp; <b>Mensaje {m['id_mensaje']}</b> "
-                 f"<span class='sub'>({m['tipo']}, {m['canal']}) · envío programado "
-                 f"{m['envio_programado'].replace('T', ' ')}</span>")
-            html(f"<div class='cuenta{' aprob' if aprob else ''}'>"
-                 f"{'No se enviará solo: necesita tu aprobación' if aprob else 'Sale en ' + faltan(m, prog)}</div>")
-            if aprob:
-                st.error("Requiere tu aprobación: " + ", ".join(NOMBRE_EXC[e] for e in m["excepciones"])
-                         + ". No se enviará solo.")
-            meta = m.get("meta") or {}
-            if meta.get("en_vivo"):
-                st.success(f"Generado en vivo por Claude · {meta.get('modelo')} · {meta.get('segundos')} s")
-            elif id_ == demo_panel.ID_DEMO:
-                st.info(f"Generado desde {meta.get('origen', 'caché')} (modo OFFLINE o API no disponible).")
-            if caso.get("correo_real"):
-                st.caption("Este caso recibe un correo REAL (solo a la lista blanca) cuando el mensaje se envía."
-                           if correo.modo_real() else "Correo real desactivado: irá solo a la bandeja simulada.")
-                if st.button("Regenerar en vivo con Claude", key=f"regenerar_{m['id_mensaje']}"):
-                    nuevo, meta_n = demo_panel.generar_mensaje_demo(cliente)
-                    prog.editar(m["id_mensaje"], nuevo)
-                    m["meta"] = meta_n
-                    prog.guardar()
-                    cliente.guardar_cache()
-                    st.rerun()
-            texto = st.text_area("Mensaje (editable)", m["texto"], height=220, key=f"txt_{m['id_mensaje']}")
-            motivo = st.text_input("Motivo (obligatorio para cancelar)", key=f"motivo_{m['id_mensaje']}")
-            b1, b2, b3, b4 = st.columns(4)
-            try:
-                if b1.button("Guardar edición", key=f"editar_{m['id_mensaje']}"):
-                    prog.editar(m["id_mensaje"], texto)
-                    st.success("Editado: sigue programado con el texto nuevo.")
-                etiqueta = "Aprobar y enviar" if m["estado"] == "REQUIERE_APROBACION" else "Enviar ahora"
-                if b2.button(etiqueta, key=f"enviar_{m['id_mensaje']}"):
-                    if texto != m["texto"]:
-                        prog.editar(m["id_mensaje"], texto)
-                    prog.enviar_ahora(m["id_mensaje"])
-                    st.success("Enviado a la bandeja simulada.")
-                if b3.button("Cancelar", key=f"cancelar_{m['id_mensaje']}"):
-                    prog.cancelar(m["id_mensaje"], motivo)
-                    st.success("Envío cancelado.")
-                if b4.button("Contactar en persona", key=f"persona_{m['id_mensaje']}"):
-                    prog.contactar_en_persona(m["id_mensaje"], motivo)
-                    st.success("Envío automático cancelado: contacto en persona.")
-            except ValueError as exc:
-                st.error(str(exc))
+        st.markdown("**Plan de estudio**")
+        plan = plan_estudio.plan_para_tutor(id_)
+        if plan is None:
+            st.caption("El estudiante no ha compartido su plan de estudio.")
+        else:
+            st.markdown(f"Tarea: {plan['tarea']}")
+            st.dataframe(pd.DataFrame(plan["plan"]["bloques"]), hide_index=True, width="stretch")
 
-    st.markdown("**Plan de estudio**")
-    plan = plan_estudio.plan_para_tutor(id_)
-    if plan is None:
-        st.caption("El estudiante no ha compartido su plan de estudio.")
-    else:
-        st.markdown(f"Tarea: {plan['tarea']}")
-        st.dataframe(pd.DataFrame(plan["plan"]["bloques"]), hide_index=True, width="stretch")
-
-    if RUTA_DECISIONES.is_file():
-        hist = pd.read_csv(RUTA_DECISIONES, encoding="utf-8")
-        hist = hist[hist["id_seudonimo"] == id_]
-        with st.expander("Historial de decisiones del caso"):
-            st.dataframe(hist[["hora_simulada", "actor", "accion", "motivo"]], hide_index=True, width="stretch")
+        if RUTA_DECISIONES.is_file():
+            hist = pd.read_csv(RUTA_DECISIONES, encoding="utf-8")
+            hist = hist[hist["id_seudonimo"] == id_]
+            with st.expander("Historial de decisiones del caso"):
+                st.dataframe(hist[["hora_simulada", "actor", "accion", "motivo"]], hide_index=True, width="stretch")
 
 
 # --------------------------------------------------------------------------
