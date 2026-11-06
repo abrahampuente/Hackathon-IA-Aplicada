@@ -1,0 +1,11 @@
+Clasifica el siguiente check-in breve escrito por un estudiante de primer año.
+
+Categorías posibles: academico, laboral, personal, economico, bienestar, sin_alerta.
+Marca requiere_tutor = true si el texto expresa intención de abandonar, angustia significativa
+o una situación que una persona debe revisar. Ante cualquier señal de riesgo para la integridad
+del estudiante, requiere_tutor = true siempre.
+
+Responde solo con JSON: {{"categoria": "...", "requiere_tutor": true|false, "resumen": "una frase"}}
+
+Check-in:
+"""{texto}"""

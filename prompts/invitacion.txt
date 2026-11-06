@@ -1,0 +1,12 @@
+Redacta un mensaje breve (máximo 80 palabras), cálido y en segunda persona, dirigido a un estudiante de primer año.
+
+Objetivo: invitarle a una instancia de acompañamiento ({instancia}) disponible en horario {horario}.
+
+Reglas estrictas:
+- No menciones riesgo, deserción, alertas, porcentajes, modelos ni predicciones.
+- No menciones notas, inasistencias ni ningún dato personal.
+- Preséntalo como un apoyo que se ofrece a todo primer año, voluntario y sin costo.
+- Tono respetuoso, sin culpar ni presionar; reconoce que muchos estudian y trabajan a la vez.
+- Firma como "Equipo de Acompañamiento Estudiantil".
+
+Devuelve solo el texto del mensaje.
