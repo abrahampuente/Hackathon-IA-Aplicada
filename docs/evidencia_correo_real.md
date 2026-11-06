@@ -58,10 +58,7 @@ Mensaje de prueba del prototipo, Hackathon IA Aplicada 2026.
 
 ## Pantallazo
 
-<!-- Guarda la captura como docs/img/correo_enviado.png -->
-![Correo recibido en la bandeja de entrada](img/correo_enviado.png)
-
-> Antes de subir la captura, tapa la dirección completa de correo y cualquier dato personal que no sea necesario.
+![Correo recibido en la bandeja de entrada a las 13:58, con el asunto, el texto generado por Claude y el pie de prueba](image.png)
 
 ## Controles verificados
 
