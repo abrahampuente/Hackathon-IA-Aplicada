@@ -597,6 +597,8 @@ _REGLAS_APOYO: list[tuple[tuple[str, ...], str, str]] = [
     (("pasaje", "transporte", "locomocion"), "AP-TNE", "Puede rebajar el costo de los pasajes."),
     (("libro", "bibliografia"), "AP-BIBLIO", "Acceso gratuito a la bibliografía del ramo."),
     (("arancel", "beca", "pagar", "economic", "plata", "deuda"), "AP-ARANCEL", "Orientación sobre becas y pagos."),
+    (("no me alcanza", "economic", "plata", "deuda", "arancel"), "AP-FUNDACION",
+     "Apoyo económico externo (Fundación Puente); requiere autorización del estudiante."),
     (("turno", "trabajo", "jefe", "horario"), "AP-HORARIO", "Ayuda para compatibilizar trabajo y estudio."),
     (("materia", "prueba", "ramo", "entend", "atrasad"), "AP-TUTORIA", "Tutoría en los ramos que le cuestan."),
     (("ansiedad", "agotad", "angustia", "dormir", "triste"), "AP-PSICO", "Apoyo psicológico confidencial."),

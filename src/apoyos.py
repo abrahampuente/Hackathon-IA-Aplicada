@@ -25,8 +25,8 @@ DATOS_A_COMPARTIR: dict[str, dict[str, str]] = {
     "AP-FUNDACION": {
         "datos": "Tu nombre, tu correo de contacto y una descripción general de tu necesidad económica "
                  "(sin notas, asistencia ni información de salud).",
-        "con_quien": "Fundación aliada (ejemplo), organización externa a la institución.",
-        "para_que": "Que la fundación evalúe si puede entregarte un apoyo económico puntual.",
+        "con_quien": "Fundación Puente, organización externa a la institución.",
+        "para_que": "Que la Fundación Puente evalúe si puede entregarte un apoyo económico puntual.",
     },
 }
 
@@ -78,9 +78,9 @@ CATALOGO: list[Apoyo] = [
     _apoyo("AP-SALA", "Sala de estudio con horario extendido", "interno", "logistica",
            "Espacio con computadores e internet abierto hasta tarde y sábados.",
            "Credencial estudiantil.", "Uso libre presentando la credencial."),
-    _apoyo("AP-FUNDACION", "Fundación aliada (ejemplo)", "externo", "economica",
-           "Organización externa que entrega apoyo económico puntual a estudiantes.",
-           "Evaluación de la fundación; requiere compartir datos con terceros.",
+    _apoyo("AP-FUNDACION", "Fundación Puente", "externo", "economica",
+           "Fundación aliada que puede entregar apoyo económico puntual a estudiantes (condiciones a validar).",
+           "Evaluación de la Fundación Puente; requiere compartir datos con una organización externa.",
            "Solo vía tutor, tras consentimiento explícito del estudiante."),
 ]
 

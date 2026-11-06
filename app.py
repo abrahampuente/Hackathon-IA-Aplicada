@@ -282,9 +282,13 @@ def vista_tutor() -> None:
                     col1.markdown(f"**{ap['nombre']}** ({'externo' if ap['tipo'] == 'externo' else 'interno'}) — "
                                   f"{s['razon']}  \nCómo postular: {ap['como_postular']}")
                     if col2.button("Ofrecer apoyo", key=f"ofrecer_{id_}_{ap['id']}"):
-                        demo_panel.ofrecer_apoyo(prog, gestor, id_, ap["id"], s["razon"])
-                        st.success("Apoyo agregado al mensaje." + (" Al ser externo, requiere tu aprobación y la "
-                                                                    "autorización del estudiante." if ap["tipo"] == "externo" else ""))
+                        try:
+                            demo_panel.ofrecer_apoyo(prog, gestor, id_, ap["id"], s["razon"])
+                        except ValueError as exc:
+                            st.error(f"No se pudo ofrecer el apoyo: {exc}")
+                        else:
+                            st.success("Apoyo ofrecido en el mensaje." + (" Al ser externo, requiere tu aprobación "
+                                       "y la autorización del estudiante." if ap["tipo"] == "externo" else ""))
                 cliente.guardar_cache()
         props = gestor.propuestas_de(id_)
         if props:
@@ -414,6 +418,8 @@ def vista_estudiante() -> None:
             "- Puedes pedir **no recibir más mensajes** cuando quieras.")
 
     with t_checkin:
+        st.button("Usar ejemplo de demo (necesidad económica)", key=f"ejemplo_checkin_{id_}",
+                  on_click=lambda k=f"checkin_txt_{id_}": st.session_state.__setitem__(k, demo_panel.CHECKIN_ECONOMICO))
         texto = st.text_area("¿Cómo vas? Cuéntanos en pocas palabras", key=f"checkin_txt_{id_}")
         if st.button("Enviar check-in", key=f"checkin_btn_{id_}") and texto.strip():
             clas = demo_panel.registrar_checkin(prog, cliente, id_, texto)

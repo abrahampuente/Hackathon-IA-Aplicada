@@ -28,6 +28,9 @@ def proveedor_recordatorio(cliente: ClienteClaude) -> Any:
 
 
 N_EXTRA_POCO_CONFIABLE: int = 2
+# Check-in de ejemplo para mostrar en vivo el flujo de apoyo externo (Fundación Puente) y consentimiento.
+CHECKIN_ECONOMICO: str = ("Este mes no me alcanza la plata: no sé si podré pagar el arancel ni los pasajes. "
+                          "Necesito algún apoyo económico para seguir.")
 
 # --- EST-DEMO: estudiante ficticio cuyo contacto es el correo de la lista blanca (envío real de demo) ---
 ID_DEMO: str = "EST-DEMO"
@@ -129,30 +132,36 @@ def texto_oferta_apoyo(id_apoyo: str) -> str:
 
 def ofrecer_apoyo(prog: Programador, gestor: apoyos.GestorApoyos, id_seudonimo: str, id_apoyo: str,
                   razon: str = "") -> dict[str, Any]:
-    """Agrega el apoyo al mensaje pendiente (o crea uno) y registra la propuesta.
+    """Agrega el apoyo al mensaje pendiente (o crea uno aparte si no cabe) y registra la propuesta.
 
     Un apoyo externo deja el mensaje en REQUIERE_APROBACION y la propuesta pendiente de consentimiento.
     """
     a = {x["id"]: x for x in apoyos.cargar_catalogo()}[id_apoyo]
     externo = a["tipo"] == "externo"
-    gestor.proponer(id_seudonimo, [{"id": id_apoyo, "razon": razon}])
     pendientes = [m for m in prog.mensajes_de(id_seudonimo) if m["estado"] in ("PROGRAMADO", "REQUIERE_APROBACION")]
     extra = texto_oferta_apoyo(id_apoyo)
+    m: dict[str, Any] | None = None
     if pendientes:
-        m = pendientes[0]
-        partes = m["texto"].split("\n¿Por qué recibí esto?")
+        candidato = pendientes[0]
+        partes = candidato["texto"].split("\n¿Por qué recibí esto?")
         nuevo = partes[0].rstrip() + "\n" + extra.strip() + ("\n\n¿Por qué recibí esto?" + partes[1] if len(partes) > 1 else "")
-        prog.editar(m["id_mensaje"], nuevo)
-        if externo:
-            m["apoyo_externo"] = True
-            m["estado"] = "REQUIERE_APROBACION"
-            m["excepciones"] = sorted(set(m["excepciones"]) | {"apoyo_externo"})
-            prog.guardar()
-        return m
-    base = ("Hola {NOMBRE}, te escribe el Equipo de Acompañamiento Estudiantil." + extra +
-            "\n¿Por qué recibí esto? Porque acompañamos a estudiantes de primer año durante el semestre."
-            "\nSi prefieres no recibir más mensajes, responde NO MÁS.")
-    return prog.crear_mensaje(id_seudonimo, base, tipo="apoyo", apoyo_externo=externo)
+        try:
+            prog.editar(candidato["id_mensaje"], nuevo)
+            m = candidato
+            if externo:
+                m["apoyo_externo"] = True
+                m["estado"] = "REQUIERE_APROBACION"
+                m["excepciones"] = sorted(set(m["excepciones"]) | {"apoyo_externo"})
+                prog.guardar()
+        except ValueError:
+            m = None   # no cabe en el mensaje (p. ej. > 120 palabras): va en un mensaje aparte
+    if m is None:
+        base = ("Hola {NOMBRE}, te escribe el Equipo de Acompañamiento Estudiantil." + extra +
+                "\n¿Por qué recibí esto? Porque acompañamos a estudiantes de primer año durante el semestre."
+                "\nSi prefieres no recibir más mensajes, responde NO MÁS.")
+        m = prog.crear_mensaje(id_seudonimo, base, tipo="apoyo", apoyo_externo=externo)
+    gestor.proponer(id_seudonimo, [{"id": id_apoyo, "razon": razon}])
+    return m
 
 
 def registrar_checkin(prog: Programador, cliente: ClienteClaude, id_seudonimo: str, texto: str) -> dict[str, Any]:
