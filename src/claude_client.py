@@ -162,6 +162,24 @@ INVITACION_FIJA: dict[str, str] = {
 }
 
 
+RECORDATORIO_FIJO: dict[str, str] = {
+    "correo": (
+        "Hola {NOMBRE}:\n\n"
+        "Solo te recordamos que los espacios de acompañamiento para primer año de {carrera} siguen "
+        "disponibles cuando los necesites: tutorías y apoyo para organizar tus tiempos.\n\n"
+        "¿Por qué recibí esto? Porque acompañamos a estudiantes de primer año durante el semestre.\n"
+        "Si prefieres no recibir más mensajes, responde NO MÁS.\n\n"
+        "Equipo de Acompañamiento Estudiantil"
+    ),
+    "whatsapp": (
+        "Hola {NOMBRE}, te recordamos que las tutorías y el apoyo para organizar tus tiempos siguen "
+        "disponibles para primer año de {carrera}, cuando te acomode.\n"
+        "¿Por qué recibí esto? Porque acompañamos a primer año durante el semestre.\n"
+        "Si prefieres no recibir más mensajes, responde NO MÁS."
+    ),
+}
+
+
 def _explicacion_local(p: dict[str, Any]) -> str:
     r = p.get("razones", [])
     return (f"Qué cambió: {' '.join(r[:2])}\n"
@@ -216,8 +234,11 @@ class ClienteClaude:
     """Envoltorio sobre el SDK `anthropic` con validación, caché offline y registro de llamadas."""
 
     def __init__(self, offline: bool | None = None, modelo: str | None = None,
-                 ruta_cache: Path | None = None, ruta_log: Path | None = None) -> None:
+                 ruta_cache: Path | None = None, ruta_log: Path | None = None,
+                 preferir_cache: bool = False) -> None:
         self.offline: bool = config.OFFLINE if offline is None else offline
+        # preferir_cache: si ya hay una respuesta de la API en caché, se usa sin volver a llamar (app y panel)
+        self.preferir_cache: bool = preferir_cache
         self.modelo: str = modelo or config.ANTHROPIC_MODEL
         self.ruta_cache: Path = ruta_cache or config.RUTA_CACHE_CLAUDE
         self.ruta_log: Path = ruta_log or config.RUTA_LOG_API
@@ -284,7 +305,9 @@ class ClienteClaude:
             self._registrar({**base, "tipo": "sin_api_key", "resultado": "no_enviado"})
             return None
         if self.llamadas_del_ciclo() >= config.MAX_LLAMADAS_API:
-            raise LimiteLlamadasError(f"Tope de {config.MAX_LLAMADAS_API} llamadas del ciclo alcanzado.")
+            # Tope alcanzado: no se llama; se sirve desde caché o plantilla local.
+            self._registrar({**base, "tipo": "limite_alcanzado", "resultado": "no_enviado"})
+            return None
         import anthropic
 
         kwargs: dict[str, Any] = {
@@ -323,6 +346,11 @@ class ClienteClaude:
         """Online -> valida -> caché; si falla o es offline -> caché -> respuesta local."""
         k = self.clave(tarea, datos)
         self.ultimo_desde_cache = False
+        previo = self._cache["entradas"].get(k)
+        if (self.preferir_cache and previo and previo["origen"] == "api"
+                and not validar(previo["respuesta"])):
+            self.ultimo_origen, self.ultimo_desde_cache = "api", True
+            return previo["respuesta"]
         if not self.offline:
             resultado = generar()
             if resultado is not None and not validar(resultado):
@@ -363,13 +391,20 @@ class ClienteClaude:
         return self._resolver("explicar_a_tutor", datos, generar, problemas_explicacion,
                               lambda: _explicacion_local(datos))
 
-    def redactar_invitacion(self, payload: dict[str, Any], canal: Canal = "correo") -> str:
+    def redactar_invitacion(self, payload: dict[str, Any], canal: Canal = "correo",
+                            tipo: Literal["invitacion", "recordatorio"] = "invitacion") -> str:
         """Invitación no estigmatizante (<= 120 palabras, tuteo, {NOMBRE}, ¿Por qué recibí esto?, salida).
 
+        tipo="recordatorio": más breve y sin presión; mismo filtro de palabras prohibidas.
         Solo usa la carrera del payload: riesgo, nivel y razones NO se envían para esta tarea.
         """
-        datos = preparar_payload({"carrera": payload["carrera"], "canal": canal})
-        prompt = cargar_prompt("invitacion").format(canal=canal, carrera=datos["carrera"])
+        datos = {"carrera": payload["carrera"], "canal": canal}
+        if tipo == "recordatorio":
+            datos["tipo"] = "recordatorio"   # la invitación conserva su clave de caché original
+        datos = preparar_payload(datos)
+        plantilla = "recordatorio" if tipo == "recordatorio" else "invitacion"
+        prompt = cargar_prompt(plantilla).format(canal=canal, carrera=datos["carrera"])
+        fija = RECORDATORIO_FIJO if tipo == "recordatorio" else INVITACION_FIJA
 
         def generar() -> str | None:
             for _ in range(2):  # si falla el filtro, se regenera 1 vez
@@ -379,7 +414,7 @@ class ClienteClaude:
             return None
 
         return self._resolver("redactar_invitacion", datos, generar, problemas_invitacion,
-                              lambda: INVITACION_FIJA[canal].replace("{carrera}", datos["carrera"]))
+                              lambda: fija[canal].replace("{carrera}", datos["carrera"]))
 
     def clasificar_checkin(self, texto: str) -> ClasificacionCheckin:
         """Clasifica un check-in. Ante señales de crisis: derivar_humano=True y urgencia alta, siempre."""

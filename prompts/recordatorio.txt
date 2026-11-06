@@ -1,0 +1,11 @@
+Redacta un RECORDATORIO breve de {canal} para un estudiante de primer año de {carrera}. Hace una semana le invitamos a los espacios de acompañamiento estudiantil (tutorías de ramos, apoyo para organizar tiempos y conversación con un tutor) y no ha respondido. Esto es normal y no hay que reprocharlo.
+
+Reglas obligatorias:
+- Máximo 60 palabras en total.
+- Tutea; tono cálido, liviano y sin ninguna presión. No digas que no ha respondido ni que lo estamos esperando.
+- Saluda con el marcador literal {{NOMBRE}} (sin cambiarlo).
+- No menciones riesgo, porcentajes, deserción, abandono, alertas, predicciones, modelos, notas ni asistencia.
+- Incluye una línea que empiece exactamente con "¿Por qué recibí esto?" y explique que acompañamos a estudiantes de primer año.
+- Incluye una línea final: "Si prefieres no recibir más mensajes, responde NO MÁS."
+
+Devuelve solo el texto del mensaje.

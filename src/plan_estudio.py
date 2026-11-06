@@ -178,6 +178,36 @@ def acepto_programa(id_seudonimo: str) -> bool:
     return id_seudonimo in json.loads(RUTA_PROGRAMA.read_text(encoding="utf-8"))["aceptaron"]
 
 
+RUTA_PLANES: Path = config.DATA_DIR / "planes_estudiantes.json"
+
+
+def _leer_planes(ruta: Path) -> dict[str, Any]:
+    return json.loads(ruta.read_text(encoding="utf-8")) if ruta.is_file() else {}
+
+
+def guardar_plan_estudiante(id_seudonimo: str, plan: Plan, tarea: str, compartido: bool,
+                            ruta: Path = RUTA_PLANES) -> None:
+    """Guarda el plan del estudiante. Es suyo: el tutor solo lo ve si `compartido` es True."""
+    planes = _leer_planes(ruta)
+    planes[id_seudonimo] = {"plan": plan, "tarea": tarea, "compartido": bool(compartido)}
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_text(json.dumps(planes, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def compartir_plan(id_seudonimo: str, compartido: bool, ruta: Path = RUTA_PLANES) -> None:
+    """El estudiante decide si comparte (o deja de compartir) su plan con el tutor."""
+    planes = _leer_planes(ruta)
+    if id_seudonimo in planes:
+        planes[id_seudonimo]["compartido"] = bool(compartido)
+        ruta.write_text(json.dumps(planes, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def plan_para_tutor(id_seudonimo: str, ruta: Path = RUTA_PLANES) -> dict[str, Any] | None:
+    """Plan visible para el tutor, o None si no existe o el estudiante no lo compartió."""
+    p = _leer_planes(ruta).get(id_seudonimo)
+    return p if p and p["compartido"] else None
+
+
 def plan_para_estudiante(id_seudonimo: str, subtareas: list[dict[str, Any]], fecha_entrega: str,
                          desde: date = FECHA_REFERENCIA) -> Plan:
     """Plan para un estudiante; solo si aceptó el programa (PermissionError si no)."""

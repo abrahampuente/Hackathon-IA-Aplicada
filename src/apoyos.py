@@ -7,6 +7,7 @@ Reglas:
 """
 from __future__ import annotations
 
+import csv
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +18,17 @@ from src import config
 NOTA_CATALOGO: str = "Contenido de ejemplo: validar con Asuntos Estudiantiles antes de usarlo con estudiantes."
 RUTA_APOYOS: Path = config.DATA_DIR / "apoyos.json"
 RUTA_PROPUESTAS: Path = config.DATA_DIR / "propuestas_apoyo.json"
-RUTA_CONSENTIMIENTOS: Path = config.DATA_DIR / "consentimientos.jsonl"
+RUTA_CONSENTIMIENTOS: Path = config.DATA_DIR / "consentimientos.csv"
+CAMPOS_CONSENTIMIENTO: tuple[str, ...] = ("ts", "id_propuesta", "id_seudonimo", "id_apoyo", "respuesta", "medio")
+# Qué se compartiría con una organización externa, con quién y para qué (pantalla de consentimiento).
+DATOS_A_COMPARTIR: dict[str, dict[str, str]] = {
+    "AP-FUNDACION": {
+        "datos": "Tu nombre, tu correo de contacto y una descripción general de tu necesidad económica "
+                 "(sin notas, asistencia ni información de salud).",
+        "con_quien": "Fundación aliada (ejemplo), organización externa a la institución.",
+        "para_que": "Que la fundación evalúe si puede entregarte un apoyo económico puntual.",
+    },
+}
 
 EstadoPropuesta = Literal["propuesta_tutor", "pendiente_consentimiento", "activo", "rechazado"]
 
@@ -132,26 +143,49 @@ class GestorApoyos:
         return nuevas
 
     def registrar_consentimiento(self, id_propuesta: str, acepta: bool, medio: str = "formulario_simulado") -> None:
-        """Registra la respuesta explícita del estudiante (simulada en la demo)."""
+        """Registra en CSV la respuesta explícita del estudiante (simulada en la demo)."""
+        p = self._propuesta(id_propuesta)
         self.ruta_consentimientos.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.ruta_consentimientos, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                                 "id_propuesta": id_propuesta, "acepta": bool(acepta), "medio": medio},
-                                ensure_ascii=False) + "\n")
+        nuevo = not self.ruta_consentimientos.is_file()
+        with open(self.ruta_consentimientos, "a", encoding="utf-8", newline="") as fh:
+            w = csv.writer(fh)
+            if nuevo:
+                w.writerow(CAMPOS_CONSENTIMIENTO)
+            w.writerow([datetime.now(timezone.utc).isoformat(timespec="seconds"), id_propuesta,
+                        p["id_seudonimo"], p["id_apoyo"], "acepto" if acepta else "no_acepto", medio])
         if not acepta:
-            self._propuesta(id_propuesta)["estado"] = "rechazado"
+            p["estado"] = "rechazado"
             self._guardar()
 
     def consentimiento_vigente(self, id_propuesta: str) -> bool:
-        """True si la última respuesta registrada para la propuesta es un sí."""
+        """True si la última respuesta registrada para la propuesta es un Acepto."""
         if not self.ruta_consentimientos.is_file():
             return False
         ultimo = None
-        for l in self.ruta_consentimientos.read_text(encoding="utf-8").splitlines():
-            e = json.loads(l)
-            if e["id_propuesta"] == id_propuesta:
-                ultimo = e["acepta"]
-        return ultimo is True
+        with open(self.ruta_consentimientos, encoding="utf-8", newline="") as fh:
+            for fila in csv.DictReader(fh):
+                if fila["id_propuesta"] == id_propuesta:
+                    ultimo = fila["respuesta"]
+        return ultimo == "acepto"
+
+    def propuestas_de(self, id_seudonimo: str) -> list[dict[str, Any]]:
+        """Propuestas de un estudiante."""
+        return [p for p in self.propuestas if p["id_seudonimo"] == id_seudonimo]
+
+    def externas_pendientes(self, id_seudonimo: str) -> list[dict[str, Any]]:
+        """Propuestas externas que esperan la respuesta del estudiante."""
+        return [p for p in self.propuestas_de(id_seudonimo)
+                if p["tipo"] == "externo" and p["estado"] == "pendiente_consentimiento"]
+
+    @staticmethod
+    def etiqueta_estado(p: dict[str, Any]) -> str:
+        """Texto para el panel; un externo solo figura como derivado si está activo (con Acepto)."""
+        if p["tipo"] == "externo":
+            return {"pendiente_consentimiento": "Pendiente de autorización del estudiante",
+                    "rechazado": "El estudiante no autorizó", "activo": "Derivado (con autorización)",
+                    "propuesta_tutor": "Pendiente de autorización del estudiante"}[p["estado"]]
+        return {"propuesta_tutor": "Sugerido", "activo": "Activado por el tutor", "rechazado": "Descartado",
+                "pendiente_consentimiento": "Sugerido"}[p["estado"]]
 
     def activar(self, id_propuesta: str, aprobado_por_tutor: bool) -> dict[str, Any]:
         """Activa una propuesta si el tutor la aprueba y, si es externa, hay consentimiento vigente.

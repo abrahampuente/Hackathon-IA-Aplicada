@@ -125,7 +125,46 @@ def ejecutar(cliente: ClienteClaude) -> dict[str, Any]:
     return salida
 
 
+def ejecutar_panel(cliente: ClienteClaude) -> dict[str, Any]:
+    """Ciclo 5: lo que el panel necesita en caché (recordatorios, apoyos de check-ins demo,
+    explicaciones e invitaciones de los casos extra y resúmenes de todas las secciones)."""
+    from src import demo_panel  # import local: demo_panel importa este módulo
+
+    est = pd.read_csv(config.RUTA_ESTUDIANTES, encoding="utf-8")
+    pred = pd.read_csv(config.RUTA_PREDICCIONES, encoding="utf-8")
+    out: dict[str, Any] = {"recordatorios": {}, "sugerencias": {}, "explicaciones": 0, "secciones": 0}
+    casos = demo_panel.casos()
+    for c in casos:
+        if c["nivel"] not in ("medio", "alto"):
+            continue
+        canal = demo_panel.canal_de(c["jornada"])
+        p = payload_para_claude(c)
+        cliente.explicar_a_tutor(p)
+        cliente.redactar_invitacion(p, canal)
+        out["explicaciones"] += 1
+        clave = f"{c['carrera']}|{canal}"
+        if clave not in out["recordatorios"]:
+            out["recordatorios"][clave] = cliente.redactar_invitacion({"carrera": c["carrera"]}, canal,
+                                                                     tipo="recordatorio")
+    for c in casos:
+        if c["checkin_demo"]:
+            clas = cliente.clasificar_checkin(c["checkin_demo"])
+            if clas["necesidad"] != "ninguna":
+                out["sugerencias"][c["id_seudonimo"]] = cliente.sugerir_apoyos(clas["necesidad"], c["checkin_demo"])
+    for agregados in auditoria.agregados_por_seccion(est, pred).values():
+        cliente.resumir_seccion(agregados)
+        out["secciones"] += 1
+    cliente.guardar_cache()
+    return out
+
+
 def main() -> int:
+    if "--panel" in sys.argv:
+        cliente = ClienteClaude(preferir_cache=True)   # solo llama por lo que falta en caché
+        r = ejecutar_panel(cliente)
+        print(f"Caché del panel lista: {len(r['recordatorios'])} recordatorios, {len(r['sugerencias'])} casos con "
+              f"apoyos, {r['secciones']} secciones. Llamadas a la API: {cliente.llamadas}.")
+        return 0
     cliente = ClienteClaude()
     r = ejecutar(cliente)
     origenes = [c["origen_invitacion"] for c in r["casos"]]
