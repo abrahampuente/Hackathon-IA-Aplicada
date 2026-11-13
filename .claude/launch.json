@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "panel-demo-seguro",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set OFFLINE=1&& set MODO_CORREO_REAL=0&& python -m streamlit run app.py --server.headless true --server.port 8502"],
+      "port": 8502
+    }
+  ]
+}
